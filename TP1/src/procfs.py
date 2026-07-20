@@ -111,6 +111,14 @@ def parse_stat(text: str) -> dict[str, int | str] | None:
             "cmajflt": int(fields[10]),
             "utime": int(fields[11]),
             "stime": int(fields[12]),
+            "pgrp": int(fields[2]),
+            "session": int(fields[3]),
+            "minflt": int(fields[7]),
+            "cminflt": int(fields[8]),
+            "majflt": int(fields[9]),
+            "cmajflt": int(fields[10]),
+            "rt_priority": int(fields[37]) if len(fields) > 37 else None,
+            "policy": int(fields[38]) if len(fields) > 38 else None,
         }
     except ValueError:
         return None
