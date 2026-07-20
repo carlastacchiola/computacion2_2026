@@ -102,15 +102,15 @@ def parse_stat(text: str) -> dict[str, int | str] | None:
     try:
         return {
             "pid": int(pid_text),
-            "comm": comm,
+             "comm": comm,
             "state": fields[0],
             "ppid": int(fields[1]),
+            "minflt": int(fields[7]),
+            "cminflt": int(fields[8]),
+            "majflt": int(fields[9]),
+            "cmajflt": int(fields[10]),
             "utime": int(fields[11]),
             "stime": int(fields[12]),
-            "priority": int(fields[15]),
-            "nice": int(fields[16]),
-            "num_threads": int(fields[17]),
-            "starttime": int(fields[19]),
         }
     except ValueError:
         return None
@@ -199,3 +199,10 @@ def calculate_cpu_percent(
     delta_ticks = max(0, new_ticks - old_ticks)
     cpu_seconds = delta_ticks / clock_ticks
     return (cpu_seconds / elapsed_seconds) * 100.0
+
+def read_process_status(pid: int, proc_root: str = PROC_ROOT) -> dict[str, str] | None:
+    status_text = read_text(os.path.join(proc_root, str(pid), "status"))
+    if status_text is None:
+        return None
+
+    return parse_status(status_text)
