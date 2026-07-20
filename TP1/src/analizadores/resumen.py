@@ -77,3 +77,17 @@ def collect_summary(sample_seconds: float = 1.0, limit: int | None = 30) -> list
         )
 
     return processes
+
+def run_summary_analyzer(output_queue, stop_event, interval_seconds=2.0):
+    while not stop_event.is_set():
+        processes = collect_summary(sample_seconds=1.0, limit=30)
+
+        message = {
+            "type": "resumen",
+            "timestamp": time.time(),
+            "processes": processes,
+        }
+
+        output_queue.put(message)
+
+        stop_event.wait(interval_seconds)

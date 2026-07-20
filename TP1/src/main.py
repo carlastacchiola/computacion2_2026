@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from multiprocessing import Event, Process, Queue
+from queue import Empty
+
 from rich.console import Console
 from rich.table import Table
 
-from src.analizadores.resumen import collect_summary
+from src.analizadores.resumen import run_summary_analyzer
 
 
-def build_table() -> Table:
+def build_table(processes: list[dict]) -> Table:
     table = Table(title="Monitor de procesos - vista resumen")
     table.add_column("PID", justify="right")
     table.add_column("Nombre")
@@ -17,7 +20,7 @@ def build_table() -> Table:
     table.add_column("CPU%", justify="right")
     table.add_column("Comando")
 
-    for proc in collect_summary(sample_seconds=1.0, limit=30):
+    for proc in processes:
         table.add_row(
             str(proc["pid"]),
             proc["name"],
@@ -34,7 +37,33 @@ def build_table() -> Table:
 
 def main() -> None:
     console = Console()
-    console.print(build_table())
+    output_queue = Queue()
+    stop_event = Event()
+
+    analyzer = Process(
+        target=run_summary_analyzer,
+        args=(output_queue, stop_event),
+        name="analizador-resumen",
+    )
+
+    analyzer.start()
+
+    try:
+        message = output_queue.get(timeout=5)
+
+        if message["type"] == "resumen":
+            console.print(build_table(message["processes"]))
+
+    except Empty:
+        console.print("[red]No llegaron datos del analizador resumen.[/red]")
+
+    finally:
+        stop_event.set()
+        analyzer.join(timeout=3)
+
+        if analyzer.is_alive():
+            analyzer.terminate()
+            analyzer.join()
 
 
 if __name__ == "__main__":
