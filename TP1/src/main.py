@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from multiprocessing import Event, Process, Queue
-from queue import Empty
+import time
+from multiprocessing import Event, Manager, Process, Queue
 
 from rich.console import Console
+from rich.live import Live
 from rich.table import Table
 
+from src.agregador import run_aggregator
 from src.analizadores.resumen import run_summary_analyzer
 
 
-def build_table(processes: list[dict]) -> Table:
-    table = Table(title="Monitor de procesos - vista resumen")
+def build_summary_table(processes: list[dict]) -> Table:
+    table = Table(title="Monitor multiproceso - vista resumen")
     table.add_column("PID", justify="right")
     table.add_column("Nombre")
     table.add_column("Estado")
@@ -35,35 +37,64 @@ def build_table(processes: list[dict]) -> Table:
     return table
 
 
+def build_loading_table() -> Table:
+    table = Table(title="Monitor multiproceso")
+    table.add_column("Estado")
+    table.add_row("Esperando datos del analizador resumen...")
+    return table
+
+
 def main() -> None:
     console = Console()
-    output_queue = Queue()
     stop_event = Event()
+    output_queue = Queue()
 
-    analyzer = Process(
-        target=run_summary_analyzer,
-        args=(output_queue, stop_event),
-        name="analizador-resumen",
-    )
+    with Manager() as manager:
+        snapshot = manager.dict()
 
-    analyzer.start()
+        summary_process = Process(
+            target=run_summary_analyzer,
+            args=(output_queue, stop_event),
+            name="analizador-resumen",
+        )
 
-    try:
-        message = output_queue.get(timeout=5)
+        aggregator_process = Process(
+            target=run_aggregator,
+            args=(output_queue, snapshot, stop_event),
+            name="agregador",
+        )
 
-        if message["type"] == "resumen":
-            console.print(build_table(message["processes"]))
+        processes = [summary_process, aggregator_process]
 
-    except Empty:
-        console.print("[red]No llegaron datos del analizador resumen.[/red]")
+        for process in processes:
+            process.start()
 
-    finally:
-        stop_event.set()
-        analyzer.join(timeout=3)
+        try:
+            with Live(build_loading_table(), console=console, refresh_per_second=2) as live:
+                while True:
+                    resumen = snapshot.get("resumen")
 
-        if analyzer.is_alive():
-            analyzer.terminate()
-            analyzer.join()
+                    if resumen is None:
+                        live.update(build_loading_table())
+                    else:
+                        data = resumen["data"]
+                        live.update(build_summary_table(data["processes"]))
+
+                    time.sleep(0.5)
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Cerrando monitor...[/yellow]")
+
+        finally:
+            stop_event.set()
+
+            for process in processes:
+                process.join(timeout=3)
+
+            for process in processes:
+                if process.is_alive():
+                    process.terminate()
+                    process.join()
 
 
 if __name__ == "__main__":
