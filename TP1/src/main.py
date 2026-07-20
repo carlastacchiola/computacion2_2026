@@ -3,11 +3,12 @@ from __future__ import annotations
 import time
 from multiprocessing import Event, Manager, Process, Queue
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.table import Table
 
 from src.agregador import run_aggregator
+from src.analizadores.memoria import run_memory_analyzer
 from src.analizadores.resumen import run_summary_analyzer
 
 
@@ -37,10 +38,38 @@ def build_summary_table(processes: list[dict]) -> Table:
     return table
 
 
+def build_memory_table(processes: list[dict]) -> Table:
+    table = Table(title="Vista memoria")
+    table.add_column("PID", justify="right")
+    table.add_column("Nombre")
+    table.add_column("VmSize", justify="right")
+    table.add_column("VmRSS", justify="right")
+    table.add_column("VmData", justify="right")
+    table.add_column("VmStk", justify="right")
+    table.add_column("VmSwap", justify="right")
+    table.add_column("MinFlt", justify="right")
+    table.add_column("MajFlt", justify="right")
+
+    for proc in processes:
+        table.add_row(
+            str(proc["pid"]),
+            proc["name"],
+            "" if proc["vmsize_kb"] is None else f"{proc['vmsize_kb']} kB",
+            "" if proc["vmrss_kb"] is None else f"{proc['vmrss_kb']} kB",
+            "" if proc["vmdata_kb"] is None else f"{proc['vmdata_kb']} kB",
+            "" if proc["vmstk_kb"] is None else f"{proc['vmstk_kb']} kB",
+            "" if proc["vmswap_kb"] is None else f"{proc['vmswap_kb']} kB",
+            "" if proc["minor_faults"] is None else str(proc["minor_faults"]),
+            "" if proc["major_faults"] is None else str(proc["major_faults"]),
+        )
+
+    return table
+
+
 def build_loading_table() -> Table:
     table = Table(title="Monitor multiproceso")
     table.add_column("Estado")
-    table.add_row("Esperando datos del analizador resumen...")
+    table.add_row("Esperando datos de los analizadores...")
     return table
 
 
@@ -58,13 +87,19 @@ def main() -> None:
             name="analizador-resumen",
         )
 
+        memory_process = Process(
+            target=run_memory_analyzer,
+            args=(output_queue, stop_event),
+            name="analizador-memoria",
+        )
+
         aggregator_process = Process(
             target=run_aggregator,
             args=(output_queue, snapshot, stop_event),
             name="agregador",
         )
 
-        processes = [summary_process, aggregator_process]
+        processes = [summary_process, memory_process, aggregator_process]
 
         for process in processes:
             process.start()
@@ -73,12 +108,22 @@ def main() -> None:
             with Live(build_loading_table(), console=console, refresh_per_second=2) as live:
                 while True:
                     resumen = snapshot.get("resumen")
+                    memoria = snapshot.get("memoria")
 
-                    if resumen is None:
-                        live.update(build_loading_table())
+                    tables = []
+
+                    if resumen is not None:
+                        resumen_data = resumen["data"]
+                        tables.append(build_summary_table(resumen_data["processes"]))
+
+                    if memoria is not None:
+                        memoria_data = memoria["data"]
+                        tables.append(build_memory_table(memoria_data["processes"]))
+
+                    if tables:
+                        live.update(Group(*tables))
                     else:
-                        data = resumen["data"]
-                        live.update(build_summary_table(data["processes"]))
+                        live.update(build_loading_table())
 
                     time.sleep(0.5)
 
