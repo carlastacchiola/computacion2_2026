@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 import time
-import signal
 
 from src.procfs import read_process_summary
+from src.senales import ignorar_senales_de_control
 
 
 def get_cpu_ticks(proc) -> int | None:
@@ -45,9 +45,6 @@ def calculate_cpu_percent(
 
 
 def collect_summary(pids: list[int], sample_seconds: float = 1.0, limit: int | None = 30) -> list[dict]:
-    """Arma la vista Resumen a partir de una lista de PIDs ya provista
-    por el recolector (no la descubre este analizador).
-    """
     first_snapshot = take_cpu_snapshot(pids)
 
     start = time.monotonic()
@@ -93,7 +90,7 @@ def collect_summary(pids: list[int], sample_seconds: float = 1.0, limit: int | N
 
 
 def run_summary_analyzer(shared_pids, output_queue, stop_event, interval_seconds=2.0):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    ignorar_senales_de_control()
 
     while not stop_event.is_set():
         pids = list(shared_pids)

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
-import signal
 import time
 
 from src.procfs import read_process_status
+from src.senales import ignorar_senales_de_control
 
 
 def infer_fd_type(target: str) -> str:
@@ -53,7 +53,7 @@ def collect_fds(pids: list[int], limit: int | None = 30, per_process_limit: int 
 
 
 def run_fds_analyzer(shared_pids, output_queue, stop_event, interval_seconds=5.0):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    ignorar_senales_de_control()
 
     while not stop_event.is_set():
         pids = list(shared_pids)

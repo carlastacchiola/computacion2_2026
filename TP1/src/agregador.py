@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import signal
 from queue import Empty
+
+from src.senales import ignorar_senales_de_control
 
 
 def run_aggregator(input_queue, snapshot, stop_event):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    ignorar_senales_de_control()
 
     while not stop_event.is_set():
         try:

@@ -3,12 +3,13 @@ from __future__ import annotations
 import time
 from multiprocessing import Event, Manager, Process, Queue
 
-from rich.console import Console, Group
+from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 
 from src.agregador import run_aggregator
 from src.recolector import run_collector
+from src.senales import ManejadorSenales, cargar_config, volcar_snapshot
 from src.analizadores.resumen import run_summary_analyzer
 from src.analizadores.memoria import run_memory_analyzer
 from src.analizadores.fds import run_fds_analyzer
@@ -55,6 +56,11 @@ def main() -> None:
     console = Console()
     stop_event = Event()
     output_queue = Queue()
+    senales = ManejadorSenales()
+    senales.instalar_handlers()
+
+    config = cargar_config()
+    verbose = bool(config.get("verbose", False))
 
     with Manager() as manager:
         snapshot = manager.dict()
@@ -92,6 +98,8 @@ def main() -> None:
             args=(output_queue, snapshot, stop_event),
             name="agregador",
         )
+
+        
         processes = [collector_process, aggregator_process, *analyzer_processes]
 
         for process in processes:
@@ -99,7 +107,26 @@ def main() -> None:
 
         try:
             with Live(build_loading_table(), console=console, refresh_per_second=2) as live:
-                while True:
+                while not senales.hay_shutdown_pendiente():
+                    if senales.consumir_reload():
+                        config = cargar_config()
+                        live.console.print(
+                            f"[cyan]SIGHUP: config.json recargado -> {config}[/cyan]"
+                        )
+
+                    if senales.consumir_dump():
+                        ruta = volcar_snapshot(snapshot)
+                        live.console.print(f"[green]SIGUSR1: snapshot volcado en {ruta}[/green]")
+
+                    if senales.consumir_toggle_verbose():
+                        verbose = not verbose
+                        estado = "activado" if verbose else "desactivado"
+                        live.console.print(f"[magenta]SIGUSR2: modo verbose {estado}[/magenta]")
+
+                    
+                    senales.consumir_repaint()
+                    senales.drenar_pipe()
+
                     resumen = snapshot.get("resumen")
 
                     if resumen is not None:
@@ -109,8 +136,7 @@ def main() -> None:
 
                     time.sleep(0.5)
 
-        except KeyboardInterrupt:
-            console.print("\n[yellow]Cerrando monitor...[/yellow]")
+            console.print("\n[yellow]Señal de shutdown recibida, cerrando monitor...[/yellow]")
 
         finally:
             stop_event.set()

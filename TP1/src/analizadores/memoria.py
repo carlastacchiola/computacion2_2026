@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import signal
 import time
 
 from src.procfs import parse_kb, read_process_stat, read_process_status
+from src.senales import ignorar_senales_de_control
 
 
 MEMORY_FIELDS = [
@@ -50,7 +50,7 @@ def collect_memory(pids: list[int], limit: int | None = 30) -> list[dict]:
 
 
 def run_memory_analyzer(shared_pids, output_queue, stop_event, interval_seconds=3.0):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    ignorar_senales_de_control()
 
     while not stop_event.is_set():
         pids = list(shared_pids)
