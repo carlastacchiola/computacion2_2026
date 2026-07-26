@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import os
 import time
-import signal 
+import signal
 
-
-from src.procfs import list_process_summaries
+from src.procfs import read_process_summary
 
 
 def get_cpu_ticks(proc) -> int | None:
@@ -15,10 +14,14 @@ def get_cpu_ticks(proc) -> int | None:
     return proc.utime + proc.stime
 
 
-def take_cpu_snapshot() -> dict[int, int]:
+def take_cpu_snapshot(pids: list[int]) -> dict[int, int]:
     snapshot: dict[int, int] = {}
 
-    for proc in list_process_summaries():
+    for pid in pids:
+        proc = read_process_summary(pid)
+        if proc is None:
+            continue
+
         ticks = get_cpu_ticks(proc)
         if ticks is not None:
             snapshot[proc.pid] = ticks
@@ -41,8 +44,11 @@ def calculate_cpu_percent(
     return (cpu_seconds / elapsed_seconds) * 100.0
 
 
-def collect_summary(sample_seconds: float = 1.0, limit: int | None = 30) -> list[dict]:
-    first_snapshot = take_cpu_snapshot()
+def collect_summary(pids: list[int], sample_seconds: float = 1.0, limit: int | None = 30) -> list[dict]:
+    """Arma la vista Resumen a partir de una lista de PIDs ya provista
+    por el recolector (no la descubre este analizador).
+    """
+    first_snapshot = take_cpu_snapshot(pids)
 
     start = time.monotonic()
     time.sleep(sample_seconds)
@@ -50,11 +56,16 @@ def collect_summary(sample_seconds: float = 1.0, limit: int | None = 30) -> list
 
     clock_ticks = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
 
+    target_pids = pids[:limit] if limit is not None else pids
     processes = []
 
-    for proc in list_process_summaries(limit=limit):
+    for pid in target_pids:
+        proc = read_process_summary(pid)
+        if proc is None:
+            continue
+
         current_ticks = get_cpu_ticks(proc)
-        old_ticks = first_snapshot.get(proc.pid)
+        old_ticks = first_snapshot.get(pid)
 
         cpu_percent = None
         if current_ticks is not None and old_ticks is not None:
@@ -80,11 +91,14 @@ def collect_summary(sample_seconds: float = 1.0, limit: int | None = 30) -> list
 
     return processes
 
-def run_summary_analyzer(output_queue, stop_event, interval_seconds=2.0):
+
+def run_summary_analyzer(shared_pids, output_queue, stop_event, interval_seconds=2.0):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while not stop_event.is_set():
-        processes = collect_summary(sample_seconds=1.0, limit=30)
+        pids = list(shared_pids)
+
+        processes = collect_summary(pids, sample_seconds=1.0, limit=30)
 
         message = {
             "type": "resumen",

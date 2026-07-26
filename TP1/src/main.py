@@ -4,12 +4,18 @@ import time
 from multiprocessing import Event, Manager, Process, Queue
 
 from rich.console import Console, Group
-from rich.live import Live
 from rich.table import Table
+from rich.live import Live
 
 from src.agregador import run_aggregator
-from src.analizadores.memoria import run_memory_analyzer
+from src.recolector import run_collector
 from src.analizadores.resumen import run_summary_analyzer
+from src.analizadores.memoria import run_memory_analyzer
+from src.analizadores.fds import run_fds_analyzer
+from src.analizadores.threads import run_threads_analyzer
+from src.analizadores.senales import run_signals_analyzer
+from src.analizadores.scheduling import run_scheduling_analyzer
+from src.analizadores.sistema import run_system_analyzer
 
 
 def build_summary_table(processes: list[dict]) -> Table:
@@ -38,38 +44,10 @@ def build_summary_table(processes: list[dict]) -> Table:
     return table
 
 
-def build_memory_table(processes: list[dict]) -> Table:
-    table = Table(title="Vista memoria")
-    table.add_column("PID", justify="right")
-    table.add_column("Nombre")
-    table.add_column("VmSize", justify="right")
-    table.add_column("VmRSS", justify="right")
-    table.add_column("VmData", justify="right")
-    table.add_column("VmStk", justify="right")
-    table.add_column("VmSwap", justify="right")
-    table.add_column("MinFlt", justify="right")
-    table.add_column("MajFlt", justify="right")
-
-    for proc in processes:
-        table.add_row(
-            str(proc["pid"]),
-            proc["name"],
-            "" if proc["vmsize_kb"] is None else f"{proc['vmsize_kb']} kB",
-            "" if proc["vmrss_kb"] is None else f"{proc['vmrss_kb']} kB",
-            "" if proc["vmdata_kb"] is None else f"{proc['vmdata_kb']} kB",
-            "" if proc["vmstk_kb"] is None else f"{proc['vmstk_kb']} kB",
-            "" if proc["vmswap_kb"] is None else f"{proc['vmswap_kb']} kB",
-            "" if proc["minor_faults"] is None else str(proc["minor_faults"]),
-            "" if proc["major_faults"] is None else str(proc["major_faults"]),
-        )
-
-    return table
-
-
 def build_loading_table() -> Table:
     table = Table(title="Monitor multiproceso")
     table.add_column("Estado")
-    table.add_row("Esperando datos de los analizadores...")
+    table.add_row("Esperando datos del recolector y los analizadores...")
     return table
 
 
@@ -80,26 +58,41 @@ def main() -> None:
 
     with Manager() as manager:
         snapshot = manager.dict()
+        shared_pids = manager.list()
 
-        summary_process = Process(
-            target=run_summary_analyzer,
-            args=(output_queue, stop_event),
-            name="analizador-resumen",
+        collector_process = Process(
+            target=run_collector,
+            args=(shared_pids, stop_event),
+            kwargs={"interval_seconds": 1.0},
+            name="recolector",
         )
 
-        memory_process = Process(
-            target=run_memory_analyzer,
-            args=(output_queue, stop_event),
-            name="analizador-memoria",
-        )
+        analyzer_specs = [
+            (run_summary_analyzer, "analizador-resumen", 2.0),
+            (run_memory_analyzer, "analizador-memoria", 3.0),
+            (run_fds_analyzer, "analizador-fds", 5.0),
+            (run_threads_analyzer, "analizador-threads", 2.0),
+            (run_signals_analyzer, "analizador-senales", 10.0),
+            (run_scheduling_analyzer, "analizador-scheduling", 10.0),
+            (run_system_analyzer, "analizador-sistema", 2.0),
+        ]
+
+        analyzer_processes = [
+            Process(
+                target=func,
+                args=(shared_pids, output_queue, stop_event),
+                kwargs={"interval_seconds": interval},
+                name=name,
+            )
+            for func, name, interval in analyzer_specs
+        ]
 
         aggregator_process = Process(
             target=run_aggregator,
             args=(output_queue, snapshot, stop_event),
             name="agregador",
         )
-
-        processes = [summary_process, memory_process, aggregator_process]
+        processes = [collector_process, aggregator_process, *analyzer_processes]
 
         for process in processes:
             process.start()
@@ -108,20 +101,9 @@ def main() -> None:
             with Live(build_loading_table(), console=console, refresh_per_second=2) as live:
                 while True:
                     resumen = snapshot.get("resumen")
-                    memoria = snapshot.get("memoria")
-
-                    tables = []
 
                     if resumen is not None:
-                        resumen_data = resumen["data"]
-                        tables.append(build_summary_table(resumen_data["processes"]))
-
-                    if memoria is not None:
-                        memoria_data = memoria["data"]
-                        tables.append(build_memory_table(memoria_data["processes"]))
-
-                    if tables:
-                        live.update(Group(*tables))
+                        live.update(build_summary_table(resumen["data"]["processes"]))
                     else:
                         live.update(build_loading_table())
 

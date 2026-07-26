@@ -3,7 +3,7 @@ from __future__ import annotations
 import signal
 import time
 
-from src.procfs import list_pids, read_process_stat, read_process_status
+from src.procfs import read_process_stat, read_process_status
 
 
 POLICIES = {
@@ -16,10 +16,11 @@ POLICIES = {
 }
 
 
-def collect_scheduling(limit: int | None = 30) -> list[dict]:
+def collect_scheduling(pids: list[int], limit: int | None = 30) -> list[dict]:
+    target_pids = pids[:limit] if limit is not None else pids
     result = []
 
-    for pid in list_pids():
+    for pid in target_pids:
         status = read_process_status(pid)
         stat = read_process_stat(pid)
 
@@ -40,19 +41,17 @@ def collect_scheduling(limit: int | None = 30) -> list[dict]:
             "pgid": stat.get("pgrp"),
         })
 
-        if limit is not None and len(result) >= limit:
-            break
-
     return result
 
 
-def run_scheduling_analyzer(output_queue, stop_event, interval_seconds=10.0):
+def run_scheduling_analyzer(shared_pids, output_queue, stop_event, interval_seconds=10.0):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while not stop_event.is_set():
+        pids = list(shared_pids)
         output_queue.put({
             "type": "scheduling",
             "timestamp": time.time(),
-            "processes": collect_scheduling(),
+            "processes": collect_scheduling(pids),
         })
         stop_event.wait(interval_seconds)

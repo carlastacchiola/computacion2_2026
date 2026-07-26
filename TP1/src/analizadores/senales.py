@@ -3,7 +3,7 @@ from __future__ import annotations
 import signal
 import time
 
-from src.procfs import list_pids, read_process_status
+from src.procfs import read_process_status
 
 
 SIGNAL_NAMES = {
@@ -29,10 +29,11 @@ def decode_signal_mask(hex_mask: str | None) -> list[str]:
     return names
 
 
-def collect_signals(limit: int | None = 30) -> list[dict]:
+def collect_signals(pids: list[int], limit: int | None = 30) -> list[dict]:
+    target_pids = pids[:limit] if limit is not None else pids
     result = []
 
-    for pid in list_pids():
+    for pid in target_pids:
         status = read_process_status(pid)
         if status is None:
             continue
@@ -47,19 +48,17 @@ def collect_signals(limit: int | None = 30) -> list[dict]:
             "shdpnd": decode_signal_mask(status.get("ShdPnd")),
         })
 
-        if limit is not None and len(result) >= limit:
-            break
-
     return result
 
 
-def run_signals_analyzer(output_queue, stop_event, interval_seconds=10.0):
+def run_signals_analyzer(shared_pids, output_queue, stop_event, interval_seconds=10.0):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while not stop_event.is_set():
+        pids = list(shared_pids)
         output_queue.put({
             "type": "senales",
             "timestamp": time.time(),
-            "processes": collect_signals(),
+            "processes": collect_signals(pids),
         })
         stop_event.wait(interval_seconds)

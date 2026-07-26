@@ -4,7 +4,7 @@ import os
 import signal
 import time
 
-from src.procfs import parse_status, read_text, list_pids
+from src.procfs import parse_status, read_text
 
 
 def parse_thread_stat(text: str) -> dict | None:
@@ -15,10 +15,11 @@ def parse_thread_stat(text: str) -> dict | None:
     return {"state": fields[0], "utime": int(fields[11]), "stime": int(fields[12])}
 
 
-def collect_threads(limit: int | None = 30, per_process_limit: int = 8) -> list[dict]:
+def collect_threads(pids: list[int], limit: int | None = 30, per_process_limit: int = 8) -> list[dict]:
+    target_pids = pids[:limit] if limit is not None else pids
     result = []
 
-    for pid in list_pids():
+    for pid in target_pids:
         task_dir = f"/proc/{pid}/task"
 
         try:
@@ -48,19 +49,17 @@ def collect_threads(limit: int | None = 30, per_process_limit: int = 8) -> list[
 
         result.append({"pid": pid, "threads": threads})
 
-        if limit is not None and len(result) >= limit:
-            break
-
     return result
 
 
-def run_threads_analyzer(output_queue, stop_event, interval_seconds=2.0):
+def run_threads_analyzer(shared_pids, output_queue, stop_event, interval_seconds=2.0):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while not stop_event.is_set():
+        pids = list(shared_pids)
         output_queue.put({
             "type": "threads",
             "timestamp": time.time(),
-            "processes": collect_threads(),
+            "processes": collect_threads(pids),
         })
         stop_event.wait(interval_seconds)

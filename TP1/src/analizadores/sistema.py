@@ -3,7 +3,7 @@ from __future__ import annotations
 import signal
 import time
 
-from src.procfs import list_pids, parse_status, read_process_stat, read_text
+from src.procfs import parse_status, read_process_stat, read_text
 
 
 def parse_meminfo() -> dict:
@@ -37,11 +37,16 @@ def parse_uptime() -> dict:
     }
 
 
-def collect_system() -> dict:
+def collect_system(pids: list[int]) -> dict:
+    """La vista Sistema necesita el universo COMPLETO de PIDs (no un
+    top-N como las demas vistas) porque cuenta totales: cantidad de
+    procesos, threads totales, zombies, etc. El recolector ya le pasa
+    la lista sin recortar.
+    """
     states = {}
     total_threads = 0
 
-    for pid in list_pids():
+    for pid in pids:
         stat = read_process_stat(pid)
         status_text = read_text(f"/proc/{pid}/status")
 
@@ -70,20 +75,21 @@ def collect_system() -> dict:
             "swap_total_kb": meminfo.get("SwapTotal"),
             "swap_free_kb": meminfo.get("SwapFree"),
         },
-        "process_count": len(list_pids()),
+        "process_count": len(pids),
         "states": states,
         "total_threads": total_threads,
         "zombies": states.get("Z", 0),
     }
 
 
-def run_system_analyzer(output_queue, stop_event, interval_seconds=2.0):
+def run_system_analyzer(shared_pids, output_queue, stop_event, interval_seconds=2.0):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while not stop_event.is_set():
+        pids = list(shared_pids)
         output_queue.put({
             "type": "sistema",
             "timestamp": time.time(),
-            "data": collect_system(),
+            "data": collect_system(pids),
         })
         stop_event.wait(interval_seconds)
