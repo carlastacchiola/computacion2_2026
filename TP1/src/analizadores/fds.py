@@ -52,14 +52,16 @@ def collect_fds(pids: list[int], limit: int | None = 30, per_process_limit: int 
     return processes
 
 
-def run_fds_analyzer(shared_pids, output_queue, stop_event, interval_seconds=5.0):
+def run_fds_analyzer(shared_pids, output_queue, stop_event, interval_value, verbose_value):
     ignorar_senales_de_control()
 
     while not stop_event.is_set():
         pids = list(shared_pids)
+        per_process_limit = 40 if verbose_value.value else 8
+
         output_queue.put({
             "type": "fds",
             "timestamp": time.time(),
-            "processes": collect_fds(pids),
+            "processes": collect_fds(pids, per_process_limit=per_process_limit),
         })
-        stop_event.wait(interval_seconds)
+        stop_event.wait(interval_value.value)

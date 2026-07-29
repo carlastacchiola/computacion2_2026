@@ -38,6 +38,11 @@ def parse_uptime() -> dict:
 
 
 def collect_system(pids: list[int]) -> dict:
+    """La vista Sistema necesita el universo COMPLETO de PIDs (no un
+    top-N como las demas vistas) porque cuenta totales: cantidad de
+    procesos, threads totales, zombies, etc. El recolector ya le pasa
+    la lista sin recortar.
+    """
     states = {}
     total_threads = 0
 
@@ -77,7 +82,7 @@ def collect_system(pids: list[int]) -> dict:
     }
 
 
-def run_system_analyzer(shared_pids, output_queue, stop_event, interval_seconds=2.0):
+def run_system_analyzer(shared_pids, output_queue, stop_event, interval_value):
     ignorar_senales_de_control()
 
     while not stop_event.is_set():
@@ -87,4 +92,4 @@ def run_system_analyzer(shared_pids, output_queue, stop_event, interval_seconds=
             "timestamp": time.time(),
             "data": collect_system(pids),
         })
-        stop_event.wait(interval_seconds)
+        stop_event.wait(interval_value.value)

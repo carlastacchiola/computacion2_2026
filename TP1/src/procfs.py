@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pwd
 from dataclasses import dataclass
 
 
@@ -18,7 +19,28 @@ class ProcessSummary:
     vmrss_kb: int | None
     utime: int | None
     stime: int | None
+    uid: int | None = None
+    user: str = ""
     cpu_percent: float | None = None
+
+
+_USERNAME_CACHE: dict[int, str] = {}
+
+
+def resolve_username(uid: int | None) -> str:
+    if uid is None:
+        return ""
+
+    if uid in _USERNAME_CACHE:
+        return _USERNAME_CACHE[uid]
+
+    try:
+        name = pwd.getpwuid(uid).pw_name
+    except KeyError:
+        name = str(uid)
+
+    _USERNAME_CACHE[uid] = name
+    return name
 
 
 def list_pids(proc_root: str = PROC_ROOT) -> list[int]:
@@ -138,6 +160,10 @@ def read_process_summary(pid: int, proc_root: str = PROC_ROOT) -> ProcessSummary
     status = parse_status(status_text)
     stat = read_process_stat(pid, proc_root)
     command = read_cmdline(pid, proc_root)
+    
+    uid_field = status.get("Uid", "")
+    uid_parts = uid_field.split()
+    uid = parse_int(uid_parts[0]) if uid_parts else None
 
     return ProcessSummary(
         pid=pid,
@@ -151,6 +177,8 @@ def read_process_summary(pid: int, proc_root: str = PROC_ROOT) -> ProcessSummary
         vmrss_kb=parse_kb(status.get("VmRSS")),
         utime=int(stat["utime"]) if stat and isinstance(stat.get("utime"), int) else None,
         stime=int(stat["stime"]) if stat and isinstance(stat.get("stime"), int) else None,
+        uid=uid,
+        user=resolve_username(uid),
     )
 
 

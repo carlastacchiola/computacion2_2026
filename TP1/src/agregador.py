@@ -18,7 +18,4 @@ def run_aggregator(input_queue, snapshot, stop_event):
         if message_type is None:
             continue
 
-        snapshot[message_type] = {
-            "timestamp": message.get("timestamp"),
-            "data": message,
-        }
+        snapshot[message_type] = message

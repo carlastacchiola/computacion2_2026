@@ -49,7 +49,7 @@ def collect_memory(pids: list[int], limit: int | None = 30) -> list[dict]:
     return processes
 
 
-def run_memory_analyzer(shared_pids, output_queue, stop_event, interval_seconds=3.0):
+def run_memory_analyzer(shared_pids, output_queue, stop_event, interval_value):
     ignorar_senales_de_control()
 
     while not stop_event.is_set():
@@ -64,4 +64,4 @@ def run_memory_analyzer(shared_pids, output_queue, stop_event, interval_seconds=
 
         output_queue.put(message)
 
-        stop_event.wait(interval_seconds)
+        stop_event.wait(interval_value.value)

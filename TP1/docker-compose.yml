@@ -1,0 +1,22 @@
+services:
+  monitor:
+    build: .
+    container_name: tp1-monitor
+    # tty + stdin_open: sin esto, la TUI (rich Live + lectura de
+    # teclado con termios) no tiene una terminal real para trabajar,
+    # y el contenedor se cerraria apenas termina de arrancar.
+    tty: true
+    stdin_open: true
+    volumes:
+      # Monta el codigo del repo dentro del contenedor: config.json se
+      # puede editar desde el host y recargar con SIGHUP, y los
+      # dump_<timestamp>.json que genera SIGUSR1 quedan visibles
+      # afuera del contenedor.
+      - ./:/app
+    # Por defecto el monitor ve el namespace de PIDs y el /proc
+    # PROPIO del contenedor (mas simple y mas seguro). Si se quiere
+    # que vea los procesos del HOST (como htop corriendo "de afuera"),
+    # se puede descomentar la siguiente linea -- pero eso requiere que
+    # Docker le de acceso al namespace de PIDs del host, algo que no
+    # todos los entornos de corrección van a permitir por default.
+    # pid: "host"

@@ -44,7 +44,7 @@ def collect_scheduling(pids: list[int], limit: int | None = 30) -> list[dict]:
     return result
 
 
-def run_scheduling_analyzer(shared_pids, output_queue, stop_event, interval_seconds=10.0):
+def run_scheduling_analyzer(shared_pids, output_queue, stop_event, interval_value):
     ignorar_senales_de_control()
 
     while not stop_event.is_set():
@@ -54,4 +54,4 @@ def run_scheduling_analyzer(shared_pids, output_queue, stop_event, interval_seco
             "timestamp": time.time(),
             "processes": collect_scheduling(pids),
         })
-        stop_event.wait(interval_seconds)
+        stop_event.wait(interval_value.value)

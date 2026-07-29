@@ -83,13 +83,15 @@ def collect_summary(pids: list[int], sample_seconds: float = 1.0, limit: int | N
                 "threads": proc.threads,
                 "vmrss_kb": proc.vmrss_kb,
                 "cpu_percent": cpu_percent,
+                "uid": proc.uid,
+                "user": proc.user,
             }
         )
 
     return processes
 
 
-def run_summary_analyzer(shared_pids, output_queue, stop_event, interval_seconds=2.0):
+def run_summary_analyzer(shared_pids, output_queue, stop_event, interval_value):
     ignorar_senales_de_control()
 
     while not stop_event.is_set():
@@ -105,4 +107,4 @@ def run_summary_analyzer(shared_pids, output_queue, stop_event, interval_seconds
 
         output_queue.put(message)
 
-        stop_event.wait(interval_seconds)
+        stop_event.wait(interval_value.value)
