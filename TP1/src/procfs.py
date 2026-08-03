@@ -20,6 +20,7 @@ class ProcessSummary:
     utime: int | None
     stime: int | None
     uid: int | None = None
+    gid: int | None = None
     user: str = ""
     cpu_percent: float | None = None
 
@@ -160,10 +161,14 @@ def read_process_summary(pid: int, proc_root: str = PROC_ROOT) -> ProcessSummary
     status = parse_status(status_text)
     stat = read_process_stat(pid, proc_root)
     command = read_cmdline(pid, proc_root)
-    
+
     uid_field = status.get("Uid", "")
     uid_parts = uid_field.split()
     uid = parse_int(uid_parts[0]) if uid_parts else None
+
+    gid_field = status.get("Gid", "")
+    gid_parts = gid_field.split()
+    gid = parse_int(gid_parts[0]) if gid_parts else None
 
     return ProcessSummary(
         pid=pid,
@@ -178,6 +183,7 @@ def read_process_summary(pid: int, proc_root: str = PROC_ROOT) -> ProcessSummary
         utime=int(stat["utime"]) if stat and isinstance(stat.get("utime"), int) else None,
         stime=int(stat["stime"]) if stat and isinstance(stat.get("stime"), int) else None,
         uid=uid,
+        gid=gid,
         user=resolve_username(uid),
     )
 
@@ -233,6 +239,58 @@ def calculate_cpu_percent(
     delta_ticks = max(0, new_ticks - old_ticks)
     cpu_seconds = delta_ticks / clock_ticks
     return (cpu_seconds / elapsed_seconds) * 100.0
+
+def _parsear_linea_de_maps(linea: str) -> dict | None:
+    partes = linea.split(None, 5)
+    if len(partes) < 5:
+        return None
+
+    direcciones, perms = partes[0], partes[1]
+    pathname = partes[5].strip() if len(partes) > 5 else ""
+
+    try:
+        inicio_hex, fin_hex = direcciones.split("-")
+        tamanio_kb = (int(fin_hex, 16) - int(inicio_hex, 16)) // 1024
+    except ValueError:
+        tamanio_kb = 0
+
+    return {"perms": perms, "pathname": pathname, "tamanio_kb": tamanio_kb}
+
+
+def _clasificar_segmento(pathname: str, perms: str) -> str:
+    if pathname == "[heap]":
+        return "heap"
+    if pathname.startswith("[stack"):
+        return "stack"
+    if "s" in perms:
+        return "shared"
+    if pathname.startswith("["):
+        return "otro"
+    if "x" in perms and pathname:
+        return "text"
+    if "w" in perms and pathname:
+        return "data"
+    if not pathname:
+        return "anonimo"
+    return "otro"
+
+
+def read_process_maps_summary(pid: int, proc_root: str = PROC_ROOT) -> dict[str, int] | None:
+   
+    texto = read_text(os.path.join(proc_root, str(pid), "maps"))
+    if texto is None:
+        return None
+
+    resumen: dict[str, int] = {}
+    for linea in texto.splitlines():
+        parsed = _parsear_linea_de_maps(linea)
+        if parsed is None:
+            continue
+        categoria = _clasificar_segmento(parsed["pathname"], parsed["perms"])
+        resumen[categoria] = resumen.get(categoria, 0) + parsed["tamanio_kb"]
+
+    return resumen
+
 
 def read_process_status(pid: int, proc_root: str = PROC_ROOT) -> dict[str, str] | None:
     status_text = read_text(os.path.join(proc_root, str(pid), "status"))

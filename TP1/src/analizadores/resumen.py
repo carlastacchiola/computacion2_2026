@@ -45,6 +45,7 @@ def calculate_cpu_percent(
 
 
 def collect_summary(pids: list[int], sample_seconds: float = 1.0, limit: int | None = 30) -> list[dict]:
+   
     first_snapshot = take_cpu_snapshot(pids)
 
     start = time.monotonic()
@@ -84,6 +85,7 @@ def collect_summary(pids: list[int], sample_seconds: float = 1.0, limit: int | N
                 "vmrss_kb": proc.vmrss_kb,
                 "cpu_percent": cpu_percent,
                 "uid": proc.uid,
+                "gid": proc.gid,
                 "user": proc.user,
             }
         )

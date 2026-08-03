@@ -6,6 +6,46 @@ from src.procfs import parse_status, read_process_stat, read_text
 from src.senales import ignorar_senales_de_control
 
 
+def leer_cpu_global() -> dict[str, int] | None:
+    text = read_text("/proc/stat") or ""
+
+    for line in text.splitlines():
+        if line.startswith("cpu "):
+            partes = line.split()[1:]
+            claves = ["user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal"]
+            valores: dict[str, int] = {}
+            for i, clave in enumerate(claves):
+                if i < len(partes):
+                    try:
+                        valores[clave] = int(partes[i])
+                    except ValueError:
+                        valores[clave] = 0
+            return valores
+
+    return None
+
+
+def calcular_cpu_global_percent(
+    anterior: dict[str, int] | None,
+    actual: dict[str, int] | None,
+) -> dict[str, float] | None:
+    if anterior is None or actual is None:
+        return None
+
+    delta = {clave: actual.get(clave, 0) - anterior.get(clave, 0) for clave in actual}
+    total = sum(delta.values())
+
+    if total <= 0:
+        return {"user": 0.0, "system": 0.0, "idle": 0.0, "iowait": 0.0}
+
+    return {
+        "user": 100.0 * delta.get("user", 0) / total,
+        "system": 100.0 * delta.get("system", 0) / total,
+        "idle": 100.0 * delta.get("idle", 0) / total,
+        "iowait": 100.0 * delta.get("iowait", 0) / total,
+    }
+
+
 def parse_meminfo() -> dict:
     text = read_text("/proc/meminfo") or ""
     data = {}
@@ -28,6 +68,19 @@ def parse_loadavg() -> dict:
     }
 
 
+def parse_boot_time() -> int | None:
+    text = read_text("/proc/stat") or ""
+    for line in text.splitlines():
+        if line.startswith("btime"):
+            partes = line.split()
+            if len(partes) > 1:
+                try:
+                    return int(partes[1])
+                except ValueError:
+                    return None
+    return None
+
+
 def parse_uptime() -> dict:
     text = read_text("/proc/uptime") or ""
     parts = text.split()
@@ -37,12 +90,9 @@ def parse_uptime() -> dict:
     }
 
 
-def collect_system(pids: list[int]) -> dict:
-    """La vista Sistema necesita el universo COMPLETO de PIDs (no un
-    top-N como las demas vistas) porque cuenta totales: cantidad de
-    procesos, threads totales, zombies, etc. El recolector ya le pasa
-    la lista sin recortar.
-    """
+def collect_system(pids: list[int], cpu_global_percent: dict[str, float] | None = None) -> dict:
+   
+
     states = {}
     total_threads = 0
 
@@ -66,6 +116,8 @@ def collect_system(pids: list[int]) -> dict:
     return {
         "loadavg": parse_loadavg(),
         "uptime": parse_uptime(),
+        "boot_time": parse_boot_time(),
+        "cpu_global": cpu_global_percent,
         "memory": {
             "mem_total_kb": meminfo.get("MemTotal"),
             "mem_available_kb": meminfo.get("MemAvailable"),
@@ -84,12 +136,18 @@ def collect_system(pids: list[int]) -> dict:
 
 def run_system_analyzer(shared_pids, output_queue, stop_event, interval_value):
     ignorar_senales_de_control()
+    lectura_anterior = leer_cpu_global()
 
     while not stop_event.is_set():
         pids = list(shared_pids)
+
+        lectura_actual = leer_cpu_global()
+        cpu_global_percent = calcular_cpu_global_percent(lectura_anterior, lectura_actual)
+        lectura_anterior = lectura_actual
+
         output_queue.put({
             "type": "sistema",
             "timestamp": time.time(),
-            "data": collect_system(pids),
+            "data": collect_system(pids, cpu_global_percent),
         })
         stop_event.wait(interval_value.value)

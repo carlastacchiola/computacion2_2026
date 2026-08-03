@@ -39,6 +39,8 @@ def collect_scheduling(pids: list[int], limit: int | None = 30) -> list[dict]:
             "nonvoluntary_ctxt_switches": status.get("nonvoluntary_ctxt_switches"),
             "sid": stat.get("session"),
             "pgid": stat.get("pgrp"),
+            "utime": stat.get("utime"),
+            "stime": stat.get("stime"),
         })
 
     return result

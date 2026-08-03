@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from src.procfs import parse_kb, read_process_stat, read_process_status
+from src.procfs import parse_kb, read_process_maps_summary, read_process_stat, read_process_status
 from src.senales import ignorar_senales_de_control
 
 
@@ -43,6 +43,8 @@ def collect_memory(pids: list[int], limit: int | None = 30) -> list[dict]:
         else:
             item["minor_faults"] = stat.get("minflt")
             item["major_faults"] = stat.get("majflt")
+
+        item["segmentos_kb"] = read_process_maps_summary(pid)
 
         processes.append(item)
 

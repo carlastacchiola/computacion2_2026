@@ -19,7 +19,16 @@ ROW_LIMIT = 20
 ORDEN_SIGUIENTE = {"cpu": "rss", "rss": "pid", "pid": "cpu"}
 
 
-
+# --------------------------------------------------------------------
+# Entrada de teclado: corre en un THREAD (no proceso) adentro del
+# proceso de display.  La arquitectura multiproceso del resto
+# del sistema (recolector/analizadores/agregador) no se toca.
+#
+# Usamos termios/tty (stdlib) para poner la terminal en modo "cbreak":
+# asi leemos tecla por tecla sin esperar Enter, y usamos select() para
+# no bloquear el hilo indefinidamente en la lectura (asi puede
+# revisar cada 200ms si stop_flag esta prendido y salir solo).
+# --------------------------------------------------------------------
 def _leer_teclado(cola: queue.Queue, stop_flag: threading.Event) -> None:
     import termios
     import tty
@@ -27,7 +36,6 @@ def _leer_teclado(cola: queue.Queue, stop_flag: threading.Event) -> None:
     try:
         fd = os.open("/dev/tty", os.O_RDONLY)
     except OSError:
-       
         return
 
     config_original = termios.tcgetattr(fd)
@@ -43,6 +51,7 @@ def _leer_teclado(cola: queue.Queue, stop_flag: threading.Event) -> None:
             char = os.read(fd, 1).decode(errors="ignore")
 
             if char == "\x1b":
+    
                 listos2, _, _ = select.select([fd], [], [], 0.05)
                 if not listos2:
                     cola.put("ESC")
@@ -75,6 +84,9 @@ def _leer_teclado(cola: queue.Queue, stop_flag: threading.Event) -> None:
         os.close(fd)
 
 
+# --------------------------------------------------------------------
+# Procesamiento de teclas sobre el estado local del display
+# --------------------------------------------------------------------
 def _ajustar_intervalo(vista_id: str, interval_values: dict, delta: float) -> None:
     definicion = VISTA_POR_ID[vista_id]
     value = interval_values[vista_id]
@@ -135,7 +147,7 @@ def _procesar_tecla(tecla: str, estado: dict, interval_values: dict, verbose_val
 
 
 # --------------------------------------------------------------------
-# Construccion de la lista de procesos 
+# Construccion de la lista de procesos (parte superior, siempre visible)
 # --------------------------------------------------------------------
 def _filtrar_y_ordenar(procesos: list[dict], estado: dict) -> list[dict]:
     resultado = procesos
@@ -168,7 +180,7 @@ def _armar_lista_visible(procesos_completos: list[dict], estado: dict) -> list[d
 
     pid_fijado = estado["pid_fijado"]
     if pid_fijado is not None and pid_fijado not in [p["pid"] for p in visibles]:
-        fijado = next((p for p in ordenados if p["pid"] == pid_fijado), None)
+        fijado = next((p for p in procesos_completos if p["pid"] == pid_fijado), None)
         if fijado is not None:
             visibles = [fijado] + visibles[: ROW_LIMIT - 1]
 
@@ -212,7 +224,7 @@ def _tabla_procesos(visibles: list[dict], estado: dict) -> Table:
 
 
 # --------------------------------------------------------------------
-# Paneles de detalle por vista 
+# Paneles de detalle por vista (parte inferior)
 # --------------------------------------------------------------------
 def _buscar_por_pid(lista: list[dict] | None, pid: int | None) -> dict | None:
     if not lista or pid is None:
@@ -249,6 +261,14 @@ def _panel_memoria(snapshot, pid: int | None) -> Table:
 
     tabla.add_row("Minor faults", str(item.get("minor_faults", "-")))
     tabla.add_row("Major faults", str(item.get("major_faults", "-")))
+
+    segmentos = item.get("segmentos_kb")
+    if segmentos:
+        partes = ", ".join(f"{categoria}={kb}kB" for categoria, kb in segmentos.items())
+        tabla.add_row("Segmentos (maps)", partes)
+    else:
+        tabla.add_row("Segmentos (maps)", "-")
+
     return tabla
 
 
@@ -280,21 +300,24 @@ def _panel_threads(snapshot, pid: int | None) -> Table:
     tabla.add_column("TID", justify="right")
     tabla.add_column("Nombre")
     tabla.add_column("Estado", justify="center")
+    tabla.add_column("CPU%", justify="right")
     tabla.add_column("Vol.", justify="right")
     tabla.add_column("Invol.", justify="right")
 
     if entrada is None:
-        tabla.add_row("(esperando datos)", "", "", "", "")
+        tabla.add_row("(esperando datos)", "", "", "", "", "")
         return tabla
 
     item = _buscar_por_pid(entrada.get("processes"), pid)
     if item is None or not item.get("threads"):
-        tabla.add_row("(sin threads visibles para este proceso)", "", "", "", "")
+        tabla.add_row("(sin threads visibles para este proceso)", "", "", "", "", "")
         return tabla
 
     for th in item["threads"]:
+        cpu = th.get("cpu_percent")
         tabla.add_row(
             str(th["tid"]), th.get("name", ""), th.get("state", ""),
+            "-" if cpu is None else f"{cpu:.1f}",
             str(th.get("voluntary_ctxt_switches", "-")),
             str(th.get("nonvoluntary_ctxt_switches", "-")),
         )
@@ -353,6 +376,8 @@ def _panel_scheduling(snapshot, pid: int | None) -> Table:
     tabla.add_row("Nonvoluntary ctxt switches", str(item.get("nonvoluntary_ctxt_switches", "-")))
     tabla.add_row("SID", str(item.get("sid", "-")))
     tabla.add_row("PGID", str(item.get("pgid", "-")))
+    tabla.add_row("utime (jiffies)", str(item.get("utime", "-")))
+    tabla.add_row("stime (jiffies)", str(item.get("stime", "-")))
     return tabla
 
 
@@ -370,8 +395,21 @@ def _panel_sistema(snapshot) -> Table:
     load = data.get("loadavg", {})
     mem = data.get("memory", {})
     uptime = data.get("uptime", {})
+    cpu_global = data.get("cpu_global")
+
+    if cpu_global is not None:
+        tabla.add_row(
+            "CPU global (user/sys/idle/iowait)",
+            f"{cpu_global['user']:.1f}% / {cpu_global['system']:.1f}% / "
+            f"{cpu_global['idle']:.1f}% / {cpu_global['iowait']:.1f}%",
+        )
+    else:
+        tabla.add_row("CPU global (user/sys/idle/iowait)", "(calculando, necesita 2 muestras)")
 
     tabla.add_row("Load average (1/5/15)", f"{load.get('load_1', '-')} / {load.get('load_5', '-')} / {load.get('load_15', '-')}")
+    boot_time = data.get("boot_time")
+    if boot_time is not None:
+        tabla.add_row("Boot time", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(boot_time)))
     tabla.add_row("Uptime (s)", f"{uptime.get('uptime_seconds', '-'):.0f}" if uptime.get("uptime_seconds") is not None else "-")
     tabla.add_row("Memoria total", f"{mem.get('mem_total_kb', '-')} kB")
     tabla.add_row("Memoria disponible", f"{mem.get('mem_available_kb', '-')} kB")
@@ -393,19 +431,44 @@ def _panel_sistema(snapshot) -> Table:
     return tabla
 
 
-def _panel_resumen(pid: int | None) -> Table:
-    tabla = Table(title="Resumen", expand=True)
-    tabla.add_column("Info")
+def _panel_resumen(snapshot, pid: int | None) -> Table:
+    entrada = snapshot.get("resumen")
+    tabla = Table(title="Resumen del proceso seleccionado", expand=True)
+    tabla.add_column("Campo")
+    tabla.add_column("Valor", justify="right")
+
+    if entrada is None:
+        tabla.add_row("(esperando datos)", "")
+        return tabla
+
+    item = _buscar_por_pid(entrada.get("processes"), pid)
+    if item is None:
+        tabla.add_row("(proceso no encontrado en el muestreo actual)", "")
+        return tabla
+
+    tabla.add_row("PID", str(item.get("pid", "-")))
+    tabla.add_row("PPID", str(item.get("ppid", "-")))
     tabla.add_row(
-        "Datos basicos por proceso en la tabla de arriba. "
-        "Cambia de vista (1-7) para ver memoria, FDs, threads, senales o scheduling "
-        "del proceso seleccionado."
+        "UID / GID",
+        f"{item.get('uid', '-')} / {item.get('gid', '-')} ({item.get('user', '-')})",
     )
+    tabla.add_row("Estado", str(item.get("state", "-")))
+    tabla.add_row("Threads", str(item.get("threads", "-")))
+    tabla.add_row(
+        "CPU%",
+        "-" if item.get("cpu_percent") is None else f"{item['cpu_percent']:.1f}",
+    )
+    tabla.add_row(
+        "VmRSS",
+        "-" if item.get("vmrss_kb") is None else f"{item['vmrss_kb']} kB",
+    )
+    tabla.add_row("Comando completo", item.get("command", "-"))
+
     return tabla
 
 
 DETALLE_POR_VISTA = {
-    "resumen": lambda snap, pid: _panel_resumen(pid),
+    "resumen": lambda snap, pid: _panel_resumen(snap, pid),
     "memoria": lambda snap, pid: _panel_memoria(snap, pid),
     "fds": lambda snap, pid: _panel_fds(snap, pid),
     "threads": lambda snap, pid: _panel_threads(snap, pid),
