@@ -307,18 +307,7 @@ kill -TERM $(cat monitor.pid)
 ```
 ---
 
-## 7. Capturas de pantalla
-
-![alt text](<Captura de pantalla de 2026-08-02 23-17-58.png>)
-![alt text](<Captura de pantalla de 2026-08-02 23-18-07.png>)
-![alt text](<Captura de pantalla de 2026-08-02 23-18-20.png>)
-![alt text](<Captura de pantalla de 2026-08-02 23-18-29.png>)
-![alt text](<Captura de pantalla de 2026-08-02 23-18-36.png>)
-![alt text](<Captura de pantalla de 2026-08-02 23-18-44.png>)
-![alt text](<Captura de pantalla de 2026-08-02 23-18-53.png>)
----
-
-## 8. Decisiones sobre la TUI
+## 7. Decisiones sobre la TUI
 
 Usé `rich` (`Live` en modo pantalla completa) en vez de `curses` porque ya
 venía trabajando con `rich.table.Table` para el prototipo inicial y su API de
@@ -332,11 +321,9 @@ reemplaza por `/dev/null`), así que la lectura de teclado no puede usar
 directamente, que es la terminal *controladora* del proceso y sí sobrevive
 al fork.
 
-El layout es simple a propósito: encabezado con el estado actual (vista,
-intervalo, orden, filtros activos), la lista de procesos, el panel de
-detalle de la vista activa, y un pie con los keybindings — sin subventanas ni
-scroll horizontal, para que se pueda leer de un vistazo en una terminal
-estándar de 80-100 columnas.
+## 8. Capturas de pantalla
+Las capturas de pantalla se encuentran en la carpeta `capturas/`.
+
 
 ---
 
