@@ -1,3 +1,4 @@
 fastapi
-uvicornhttpx
+uvicorn
 httpx
+
