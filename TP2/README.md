@@ -255,6 +255,3 @@ La diferencia (7,36 s) coincide con lo que le faltaba al hash cancelado para ter
 
 ---
 
-## 7. Lo que aprendí
-
-_(Pendiente: 2-3 párrafos personales, a completar al terminar el TP.)_
