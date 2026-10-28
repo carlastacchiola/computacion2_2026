@@ -25,6 +25,8 @@ app = FastAPI(title="Plataforma de Tareas Distribuidas", lifespan=lifespan)
 
 @app.post("/tareas", status_code=202)
 async def crear_tarea(nueva: NuevaTarea):
+    if not plataforma.aceptando:
+        raise HTTPException(status_code=503, detail="Apagando: no se aceptan tareas")
     tarea = plataforma.encolar(nueva)
     return {"id": tarea.id, "estado": tarea.estado.value}
 
