@@ -1,0 +1,10 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DIR_ESTADO: /data
+    volumes:
+      - ./estado:/data      # los volcados quedan en TP2/estado/ del host
+    stop_grace_period: 20s  # más que GRACIA_APAGADO (10 s), si no Docker mata antes de volcar
