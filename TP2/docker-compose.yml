@@ -8,3 +8,9 @@ services:
     volumes:
       - ./estado:/data      # los volcados quedan en TP2/estado/ del host
     stop_grace_period: 20s  # más que GRACIA_APAGADO (10 s), si no Docker mata antes de volcar
+  prueba:
+    build: .
+    command: ["uvicorn", "app.servidor_prueba:app", "--host", "0.0.0.0", "--port", "9000"]
+    ports:
+      - "9000:9000"
+    profiles: ["medicion"]
