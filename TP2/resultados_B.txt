@@ -1,0 +1,21 @@
+=== 100 tareas, N_WORKERS=10 ===
+tareas: 100 (100 aceptadas, 0 con error)  duración c/u: 0.0 s
+  envío de las 100 tareas: 0.26 s  (390 POST/s)
+  GET /estadisticas con carga: 2 ms
+  GET /tareas con carga:       4 ms
+  total hasta terminar todas:  0.26 s  (377.6 tareas/s)
+memoria: 35.96MiB / 19.32GiB   cpu: 0.30%
+=== 1000 tareas, N_WORKERS=10 ===
+tareas: 1000 (1000 aceptadas, 0 con error)  duración c/u: 0.0 s
+  envío de las 1000 tareas: 3.75 s  (267 POST/s)
+  GET /estadisticas con carga: 3 ms
+  GET /tareas con carga:       23 ms
+  total hasta terminar todas:  3.78 s  (264.6 tareas/s)
+memoria: 37.81MiB / 19.32GiB   cpu: 0.31%
+=== 10000 tareas, N_WORKERS=10 ===
+tareas: 10000 (10000 aceptadas, 0 con error)  duración c/u: 0.0 s
+  envío de las 10000 tareas: 19.29 s  (518 POST/s)
+  GET /estadisticas con carga: 8 ms
+  GET /tareas con carga:       235 ms
+  total hasta terminar todas:  19.54 s  (511.9 tareas/s)
+memoria: 46.85MiB / 19.32GiB   cpu: 0.22%

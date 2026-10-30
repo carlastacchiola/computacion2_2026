@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -8,7 +9,7 @@ from .workers import Plataforma
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
-plataforma = Plataforma(n_workers=3)
+plataforma = Plataforma(n_workers=int(os.environ.get("N_WORKERS", "3")))
 
 
 @asynccontextmanager

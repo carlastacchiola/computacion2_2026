@@ -1,0 +1,30 @@
+=== N_WORKERS=3 ===
+tareas: 60 (60 aceptadas, 0 con error)  duración c/u: 1.0 s
+  envío de las 60 tareas: 0.13 s  (452 POST/s)
+  GET /estadisticas con carga: 4 ms
+  GET /tareas con carga:       4 ms
+  total hasta terminar todas:  20.43 s  (2.9 tareas/s)
+=== N_WORKERS=10 ===
+tareas: 60 (60 aceptadas, 0 con error)  duración c/u: 1.0 s
+  envío de las 60 tareas: 0.12 s  (496 POST/s)
+  GET /estadisticas con carga: 6 ms
+  GET /tareas con carga:       4 ms
+  total hasta terminar todas:  6.24 s  (9.6 tareas/s)
+=== N_WORKERS=30 ===
+tareas: 60 (60 aceptadas, 0 con error)  duración c/u: 1.0 s
+  envío de las 60 tareas: 0.11 s  (552 POST/s)
+  GET /estadisticas con carga: 2 ms
+  GET /tareas con carga:       3 ms
+  total hasta terminar todas:  2.15 s  (27.9 tareas/s)
+=== N_WORKERS=60 ===
+tareas: 60 (60 aceptadas, 0 con error)  duración c/u: 1.0 s
+  envío de las 60 tareas: 0.10 s  (610 POST/s)
+  GET /estadisticas con carga: 2 ms
+  GET /tareas con carga:       3 ms
+  total hasta terminar todas:  1.13 s  (53.3 tareas/s)
+=== N_WORKERS=200 ===
+tareas: 60 (60 aceptadas, 0 con error)  duración c/u: 1.0 s
+  envío de las 60 tareas: 0.09 s  (636 POST/s)
+  GET /estadisticas con carga: 2 ms
+  GET /tareas con carga:       4 ms
+  total hasta terminar todas:  1.11 s  (53.8 tareas/s)
